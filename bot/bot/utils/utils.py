@@ -204,7 +204,7 @@ class NewMessage:
             buttons_count = dict.fromkeys(buttons, 0)
 
             for user in poll_info["answers"]["users"]:
-                button = buttons[user["vote"]]
+                button = buttons[int(user["vote"])]
                 buttons_count[button] += 1
 
             buttons = [

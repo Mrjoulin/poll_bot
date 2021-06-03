@@ -202,7 +202,7 @@ class PollProcess(SendMessage):
         buttons_count = dict.fromkeys(buttons, 0)
 
         for user in poll_info["answers"]["users"]:
-            button = buttons[user["vote"]]
+            button = buttons[int(user["vote"])]
             buttons_count[button] += 1
 
         buttons = [button + (" (%s)" % buttons_count[button] if buttons_count[button] else "") for button in buttons]

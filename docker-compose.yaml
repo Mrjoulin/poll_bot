@@ -1,0 +1,27 @@
+version: "3"
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: poll_bot_mongodb
+
+    volumes:
+      - ./data/db:/data/db
+
+    restart: always
+
+  bot:
+    build: bot
+    container_name: poll_bot
+
+    tty: true
+
+    environment:
+      - DB_NAME=poll_bot
+      - USERS_COLLECTION=users
+      - POLLS_COLLECTION=polls
+      - BOT_TOKEN=1837428556:AAEX7EABhFSlK4cuam6em6NlX4NHujwBNV8
+      - IS_PROD=1
+      - ADMINS_IDS=408298229,85210199
+
+    restart: on-failure

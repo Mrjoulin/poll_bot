@@ -1,0 +1,7 @@
+pymongo
+requests
+validators
+coloredlogs
+python-dateutil
+python-telegram-bot
+git+git://github.com/Mrjoulin/botal.git

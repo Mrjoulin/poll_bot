@@ -245,15 +245,11 @@ def update_poll_user_vote(pool_id: str, vote: int, user_id: int, name: str, user
 
     pool_info = get_poll(poll_id=pool_id, polls=pools)
 
-    logging.info("Get poll info: %s" % pool_info)
-
     if not pool_info:
         return {
             "success": False,
             "message": "Опрос не найден"
         }
-
-    logging.info("Get poll info: %s" % pool_info)
 
     users = pool_info["answers"]["users"]
     count = pool_info["answers"]["count"]
@@ -281,8 +277,6 @@ def update_poll_user_vote(pool_id: str, vote: int, user_id: int, name: str, user
         users.append(user_info)
 
         count += 1
-
-    logging.info("Update users to %s" % users)
 
     try:
         pools.update_one(

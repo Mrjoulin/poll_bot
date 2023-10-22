@@ -3,5 +3,5 @@ requests
 validators
 coloredlogs
 python-dateutil
-python-telegram-bot
-git+git://github.com/Mrjoulin/botal.git
+python-telegram-bot==13.5
+git+https://github.com/Mrjoulin/botal.git

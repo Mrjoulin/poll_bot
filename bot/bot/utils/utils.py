@@ -7,7 +7,7 @@ from validators import url as correct_url
 from dateutil.parser import parse as parse_date, ParserError
 from telegram.error import NetworkError, Unauthorized
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram import InlineQuery, InlineQueryResultArticle, InputTextMessageContent, CallbackQuery
+from telegram import InlineQuery, InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultCachedPhoto
 
 # Local imports
 
@@ -159,8 +159,6 @@ class NewMessage:
 
         for poll in all_polls:
             if query_text in poll["question"].lower():
-                message = InputTextMessageContent(message_text=poll["question"])
-
                 buttons = [
                     (button, "poll_vote_%s_%s" % (
                         poll["_id"], poll["buttons"].index(button)
@@ -169,13 +167,24 @@ class NewMessage:
                 buttons = split_array_to_chunks(buttons, num_in_chunk=2)
                 reply_markup = get_reply_markup(buttons)
 
-                article = InlineQueryResultArticle(
-                    id=str(random.randint(10 * 3, 10 ** 30)),
-                    title=poll["question"],
-                    description=", ".join(poll["buttons"]),
-                    input_message_content=message,
-                    reply_markup=reply_markup
-                )
+                if "picture" in poll and poll['picture']:
+                    article = InlineQueryResultCachedPhoto(
+                        id=str(random.randint(10 * 3, 10 ** 30)),
+                        photo_file_id=poll['picture'],
+                        title=poll["question"],
+                        description=", ".join(poll["buttons"]),
+                        caption=poll["question"],
+                        parse_mode="Markdown",
+                        reply_markup=reply_markup
+                    )
+                else:
+                    article = InlineQueryResultArticle(
+                        id=str(random.randint(10 * 3, 10 ** 30)),
+                        title=poll["question"],
+                        description=", ".join(poll["buttons"]),
+                        input_message_content=InputTextMessageContent(message_text=poll["question"]),
+                        reply_markup=reply_markup
+                    )
 
                 polls.append(article)
 
@@ -198,8 +207,13 @@ class NewMessage:
 
         status = update_poll_user_vote(pool_id=poll_id, vote=vote_index, user_id=user_id, name=name, username=username)
 
-        if status["success"]:
-            poll_info = status["info"]
+        if not status["success"]:
+            logging.error("Not update poll user vote: %s" % status)
+            return
+
+        poll_info = status["info"]
+
+        if "updated" in status and status["updated"]:
             buttons = poll_info["buttons"].copy()
             buttons_count = dict.fromkeys(buttons, 0)
 
@@ -209,7 +223,7 @@ class NewMessage:
 
             buttons = [
                 (
-                    button + ((" " + str(buttons_count[button])) if buttons_count[button] else ""),
+                    button + ((" (%s)" % buttons_count[button]) if buttons_count[button] else ""),
                     "poll_vote_%s_%s" % (poll_info["_id"], buttons.index(button))
                  ) for button in buttons
             ]
@@ -219,11 +233,14 @@ class NewMessage:
 
             try:
                 self.callback.edit_message_reply_markup(reply_markup=reply_markup)
-                self.callback.answer(text="You answered for \"%s\"" % poll_info["buttons"][vote_index])
+                self.callback.answer(text="Вы проголосвали за \"%s\"" % poll_info["buttons"][vote_index])
             except Exception as e:
                 logging.error("Error while sending reply markup for poll %s: %s" % (poll_info["_id"], e))
         else:
-            logging.error("Not update poll user vote: %s" % status)
+            try:
+                self.callback.answer(text="Вы уже проголосвали за этот вариант")
+            except Exception as e:
+                logging.error("Error while answering callback for poll %s: %s" % (poll_info["_id"], e))
 
 
 def get_reply_markup(buttons):
@@ -283,29 +300,32 @@ class SendMessage(NewMessage):
                     new_path = "/".join(photo.name.split("/")[:-1]) + "/%s.png" % photo_id
                     os.rename(photo.name, new_path)
 
-                self.last_my_message_id = None
+                self.last_my_message_id = message.message_id
 
             elif self.message_id is None or self.message_id != self.last_my_message_id or not use_message_id:
                 if self.message_id is not None and self.message_id != self.last_my_message_id and use_message_id:
                     self.delete_last_message()
 
-                mes_id = self.bot.send_message(
+                message = self.bot.send_message(
                     chat_id=self.user_id, text=text, reply_markup=markup, parse_mode="markdown"
-                ).message_id
-                self.last_my_message_id = mes_id
+                )
+                self.last_my_message_id = message.message_id
 
             elif text != self.last_send_text:
-                self.bot.edit_message_text(
+                message = self.bot.edit_message_text(
                     chat_id=self.user_id, message_id=self.message_id, text=text,
                     reply_markup=markup, parse_mode="markdown"
                 )
             elif buttons != self.last_send_buttons:
-                self.bot.edit_message_reply_markup(
+                message = self.bot.edit_message_reply_markup(
                     chat_id=self.user_id, message_id=self.message_id, reply_markup=markup
                 )
-            elif self.callback:
-                self.callback.answer(text="✅ Данные успешно обновлены")
-                self.callback = None
+            else:
+                message = None
+
+                if self.callback:
+                    self.callback.answer(text="✅ Данные успешно обновлены")
+                    self.callback = None
 
             if self.callback:
                 self.callback.answer()
@@ -323,6 +343,7 @@ class SendMessage(NewMessage):
             else:
                 self.last_send_buttons = None
 
+            return message
         except Exception as e:
             logging.error("Error while sending message to chat %s: %s" % (self.user_id, e))
 
@@ -331,6 +352,8 @@ class SendMessage(NewMessage):
                 thr.Timer(1, self.send_message, [get_correct_text(text), buttons, photo, None, attempts - 1]).start()
             else:
                 logging.error("Max num attempts to send message to chat %s" % self.user_id)
+
+            return None
 
     def delete_last_message(self, message_id=None):
         try:

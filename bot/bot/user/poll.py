@@ -18,6 +18,11 @@ class PollProcess(SendMessage):
                 "text": "Теперь введи название кнопок (через запятю или ;)",
                 "extension": "buttons"
             },
+            "picture": {
+                "text": "Теперь можешь отправить мне фотографию для твоего опроса",
+                "extension": "picture",
+                "input_buttons": INPUT_BUTTONS + [["Пропустить"]]
+            },
             "preview": {
                 "preview_text": "Сделал тебе превью твоего опроса! Проверь всё ли так, как ты хотел и, "
                                 "если всё хорошо, то нажимай \"Готово\". Но если тебе нужно поменять что-то "
@@ -86,20 +91,21 @@ class PollProcess(SendMessage):
 
         return status
 
-    def get_product_info(self, text: str, extension: str = None):
-        self.send_message(text=text, buttons=INPUT_BUTTONS)
+    def get_product_info(self, text: str, extension: str = None, input_buttons: list = None, **kwargs):
+        input_buttons = input_buttons or INPUT_BUTTONS
+        self.send_message(text=text, buttons=input_buttons)
 
         while True:
             yield from self.new_message()
 
-            if not self.mes_text:
-                self.send_message(text=text, buttons=INPUT_BUTTONS)
+            if not self.mes_text and not self.message['photo']:
+                self.send_message(text=text, buttons=input_buttons)
                 continue
 
             if "назад" in self.mes_text:
                 return None
             elif "помощь" in self.mes_text:
-                self.send_message(text=HELP_MESSAGE + text, buttons=INPUT_BUTTONS)
+                self.send_message(text=HELP_MESSAGE + text, buttons=input_buttons)
             else:
                 if extension == "buttons":
                     buttons_text = self.message["text"].replace(", ", ";").replace("; ", ";")
@@ -108,26 +114,41 @@ class PollProcess(SendMessage):
                     if len(buttons) > 10:
                         self.send_message(
                             text="Вы не можете добавить больше 10 кнопок\n" + text,
-                            buttons=INPUT_BUTTONS
+                            buttons=input_buttons
                         )
                         continue
 
                     return buttons
+                if extension == "picture":
+                    if "пропустить" in self.mes_text:
+                        return ""
+                    elif not self.message['photo']:
+                        continue
+
+                    return self.message['photo'][0]['file_id']
                 else:
                     return self.message["text"]
 
     def poll_preview(self, info: dict, text: str):
-        self.send_message(text=info["question"], buttons=split_array_to_chunks(info["buttons"], num_in_chunk=2))
+        mes = self.send_message(
+            text=info["question"],
+            buttons=split_array_to_chunks(info["buttons"], num_in_chunk=2),
+            photo=info['picture']
+        )
+        if mes.photo:
+            logging.info("Change photo id from %s to %s" % (info['picture'], mes.photo[-1].file_id))
+            info['picture'] = mes.photo[-1].file_id
+
         poll_message_id = self.last_my_message_id
 
         lower_buttons = list(map(str.lower, info["buttons"]))
 
         buttons = [
             [("Вопрос", "question"), ("Кнопки", "buttons")],
-            [("Готово", "done")]
+            [("Фото", "picture"), ("Готово", "done")]
         ]
 
-        data_names = ["question", "buttons", "done"]
+        data_names = ["question", "buttons", "picture", "done"]
 
         text += "\n\n*Внимание!* Данный опрос является лишь превью настоящего опроса и " \
                 "информация по нему не записывается"

@@ -77,7 +77,7 @@ db = MongoDB(db_name=DB_NAME)
 
 
 def check_user_authorized(user_id: int, users: Union[Collection, None] = None) -> Union[dict, None]:
-    if not users:
+    if users is None:
         users = db.get_collection(USERS_COLLECTION)
 
     info = users.find_one(
@@ -171,7 +171,7 @@ def update_user_know_from(user_id: int, know_from: str):
 # ** Pools **
 
 def get_poll(poll_id: str, polls: Union[Collection, None] = None):
-    if not polls:
+    if polls is None:
         polls = db.get_collection(POLLS_COLLECTION)
 
     logging.info("Find poll: %s" % poll_id)
@@ -186,7 +186,7 @@ def get_poll(poll_id: str, polls: Union[Collection, None] = None):
 
 
 def get_user_polls(user_id: int, polls: Collection = None):
-    if not polls:
+    if polls is None:
         polls = db.get_collection(POLLS_COLLECTION)
 
     find_json = {
@@ -198,7 +198,7 @@ def get_user_polls(user_id: int, polls: Collection = None):
     return list(info)
 
 
-def add_poll(user_id: int, question: str, buttons: list):
+def add_poll(user_id: int, question: str, buttons: list, picture: str):
     polls = db.get_collection(POLLS_COLLECTION)
 
     poll_id = gen_random_token()
@@ -215,6 +215,7 @@ def add_poll(user_id: int, question: str, buttons: list):
         "created_at": get_correct_date(iso=True),
         "question": question,
         "buttons": buttons,
+        "picture": picture,
         "answers": {
             "count": 0,
             "users": []
@@ -260,12 +261,14 @@ def update_poll_user_vote(pool_id: str, vote: int, user_id: int, name: str, user
     if user_id in users_answered:
         user_index = users_answered.index(user_id)
 
-        if vote == users_votes[user_index]:
-            # Remove answer
-            users.pop(user_index)
-            count -= 1
-        else:
+        if vote != users_votes[user_index]:
             users[user_index]["vote"] = vote
+        else:
+            return {
+                "success": True,
+                "info": pool_info,
+                "updated": False
+            }
     else:
         user_info = {
             "id": user_id,
@@ -297,7 +300,8 @@ def update_poll_user_vote(pool_id: str, vote: int, user_id: int, name: str, user
 
         return {
             "success": True,
-            "info": pool_info
+            "info": pool_info,
+            "updated": True
         }
 
     except Exception as e:
